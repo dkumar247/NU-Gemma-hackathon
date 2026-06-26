@@ -20,15 +20,40 @@ any Ollama or regex logic itself.
 
 import argparse
 import os
+import re
 import sys
 
 import gemma_client
 import parser as out_parser  # avoid shadowing the stdlib name `parser`
 import prompts
 
-# gemma2:2b has a small context window. Trim very large diffs so we don't blow
-# it (and so the model stays focused on the meaningful hunk).
-DEFAULT_MAX_DIFF_CHARS = 12000
+DEFAULT_MAX_DIFF_CHARS = 50000
+
+# Auto-generated files that add noise without useful signal for commit messages.
+_SKIP_FILES = re.compile(
+    r"^diff --git a/("
+    r".*\.lock"           # uv.lock, poetry.lock, package-lock.json, yarn.lock, etc.
+    r"|.*lock\.json"      # package-lock.json variants
+    r"|uv\.lock"
+    r"|Pipfile\.lock"
+    r")",
+    re.MULTILINE,
+)
+
+
+def filter_diff(text):
+    """Remove auto-generated lockfile hunks from a diff before sending to Gemma."""
+    chunks = re.split(r'(?=^diff --git )', text, flags=re.MULTILINE)
+    kept, skipped = [], []
+    for chunk in chunks:
+        if chunk.strip() and _SKIP_FILES.match(chunk):
+            fname = chunk.splitlines()[0].replace("diff --git a/", "").split(" ")[0]
+            skipped.append(fname)
+        else:
+            kept.append(chunk)
+    if skipped:
+        print(f"[skipped generated files: {', '.join(skipped)}]", file=sys.stderr)
+    return "".join(kept)
 
 
 def parse_args(argv):
@@ -53,7 +78,7 @@ def parse_args(argv):
 
 
 def read_input(path, max_chars):
-    """Read the diff file or stdin, truncating if it's too big for the context window."""
+    """Read the diff file or stdin, filter generated files, truncate if still too big."""
     if path == "-":
         text = sys.stdin.read()
     else:
@@ -61,6 +86,7 @@ def read_input(path, max_chars):
             raise SystemExit(f"Error: file not found: {path}")
         with open(path, "r", encoding="utf-8", errors="replace") as f:
             text = f.read()
+    text = filter_diff(text)
     if max_chars and len(text) > max_chars:
         original_size = len(text)
         text = text[:max_chars] + "\n\n[... diff truncated for model context ...]"
