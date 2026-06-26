@@ -155,8 +155,12 @@ def main(argv=None):
         commit = out_parser.salvage_commit(result["commit"])
         note = f"model output failed validation ({reason}); auto-corrected to a generic commit"
 
+    cl_valid, cl_reason = out_parser.validate_changelog(result["changelog"])
+    if not cl_valid:
+        print(f"[changelog warning: {cl_reason}]", file=sys.stderr)
+
     markdown = render_markdown(commit, result["changelog"], note)
-    print(markdown)
+    # print(markdown)
 
     if args.out:
         with open(args.out, "w", encoding="utf-8") as f:
