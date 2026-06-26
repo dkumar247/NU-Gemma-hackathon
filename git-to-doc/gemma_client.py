@@ -29,6 +29,20 @@ OLLAMA_URL = os.environ.get("OLLAMA_URL", "http://localhost:11434/api/generate")
 DEFAULT_MODEL = "gemma3:4b"          # fallback only; see resolve_model()
 _MODEL_FILE = ".gemma-model"          # per-machine, gitignored
 
+# Auto-detect backend from URL: if it contains /v1/ it's LM Studio (OpenAI-compatible).
+# Force with: export BACKEND=lmstudio  or  export BACKEND=ollama
+_BACKEND_ENV = os.environ.get("BACKEND", "").lower()
+
+
+def _detect_backend():
+    if _BACKEND_ENV in ("lmstudio", "lm_studio", "lm-studio", "openai"):
+        return "lmstudio"
+    if _BACKEND_ENV == "ollama":
+        return "ollama"
+    if "/v1/" in OLLAMA_URL:
+        return "lmstudio"
+    return "ollama"
+
 
 class GemmaError(RuntimeError):
     """Raised when we cannot get usable text out of the model."""
@@ -79,6 +93,66 @@ def resolve_model(cli_value=None):
     return DEFAULT_MODEL
 
 
+def _call_ollama(prompt, system, model, temperature, timeout, show_live):
+    """Ollama streaming backend (/api/generate)."""
+    payload = {
+        "model": model,
+        "prompt": prompt,
+        "stream": True,
+        "options": {"temperature": temperature},
+    }
+    if system:
+        payload["system"] = system
+    data = json.dumps(payload).encode("utf-8")
+    req = urllib.request.Request(
+        OLLAMA_URL, data=data, headers={"Content-Type": "application/json"},
+    )
+    chunks = []
+    with urllib.request.urlopen(req, timeout=timeout) as resp:
+        for line in resp:
+            line = line.strip()
+            if not line:
+                continue
+            obj = json.loads(line.decode("utf-8"))
+            piece = obj.get("response", "")
+            if piece:
+                chunks.append(piece)
+                if show_live:
+                    print(piece, end="", file=sys.stderr, flush=True)
+            if obj.get("done"):
+                break
+    if show_live:
+        print("", file=sys.stderr)
+    return "".join(chunks).strip()
+
+
+def _call_lmstudio(prompt, system, model, temperature, timeout, show_live):
+    """LM Studio OpenAI-compatible backend (/v1/chat/completions)."""
+    messages = []
+    if system:
+        messages.append({"role": "system", "content": system})
+    messages.append({"role": "user", "content": prompt})
+    payload = {
+        "model": model,
+        "messages": messages,
+        "temperature": temperature,
+        "stream": False,
+    }
+    data = json.dumps(payload).encode("utf-8")
+    req = urllib.request.Request(
+        OLLAMA_URL, data=data, headers={"Content-Type": "application/json"},
+    )
+    with urllib.request.urlopen(req, timeout=timeout) as resp:
+        body = json.loads(resp.read().decode("utf-8"))
+    try:
+        text = body["choices"][0]["message"]["content"].strip()
+    except (KeyError, IndexError):
+        text = ""
+    if show_live:
+        print(text, file=sys.stderr)
+    return text
+
+
 def call_gemma(
     prompt,
     model=None,
@@ -88,50 +162,19 @@ def call_gemma(
     retries=2,
     show_live=True,
 ):
-    """Send `prompt` to Ollama and return the model's full response text.
+    """Send `prompt` to Ollama or LM Studio and return the full response text.
 
-    Streams the response: each chunk is printed live to stderr as it arrives
-    (set show_live=False to silence it, e.g. in batch mode), and the full text
-    is assembled and returned so callers get one complete string as before.
+    Auto-detects backend from OLLAMA_URL (contains /v1/ → LM Studio, else Ollama).
+    Force with: export BACKEND=lmstudio  or  export BACKEND=ollama
     """
     model = resolve_model(model)
-    payload = {
-        "model": model,
-        "prompt": prompt,
-        "stream": True,                       # <-- stream chunk by chunk
-        "options": {"temperature": temperature},
-    }
-    if system:
-        payload["system"] = system
-
-    data = json.dumps(payload).encode("utf-8")
+    backend = _detect_backend()
+    caller = _call_lmstudio if backend == "lmstudio" else _call_ollama
     last_err = None
 
     for attempt in range(retries + 1):
         try:
-            req = urllib.request.Request(
-                OLLAMA_URL,
-                data=data,
-                headers={"Content-Type": "application/json"},
-            )
-            chunks = []
-            with urllib.request.urlopen(req, timeout=timeout) as resp:
-                # Ollama sends one JSON object per line as it generates.
-                for line in resp:
-                    line = line.strip()
-                    if not line:
-                        continue
-                    obj = json.loads(line.decode("utf-8"))
-                    piece = obj.get("response", "")
-                    if piece:
-                        chunks.append(piece)
-                        if show_live:
-                            print(piece, end="", file=sys.stderr, flush=True)
-                    if obj.get("done"):
-                        break
-            if show_live:
-                print("", file=sys.stderr)     # newline after the live stream
-            text = "".join(chunks).strip()
+            text = caller(prompt, system, model, temperature, timeout, show_live)
             if not text:
                 raise GemmaError("Model returned an empty response.")
             return text
@@ -143,10 +186,10 @@ def call_gemma(
             time.sleep(1.0 * (attempt + 1))
 
     raise GemmaError(
-        f"Could not get a usable response from Ollama at {OLLAMA_URL} "
-        f"after {retries + 1} attempts (model: {model}).\n"
-        f"  - Is the server running?  -> on Windows, check the llama tray icon\n"
-        f"  - Is the model pulled?    -> `ollama pull {model}`\n"
+        f"Could not get a usable response from {OLLAMA_URL} "
+        f"after {retries + 1} attempts (model: {model}, backend: {backend}).\n"
+        f"  Ollama:    export OLLAMA_URL=http://localhost:11434/api/generate\n"
+        f"  LM Studio: export OLLAMA_URL=http://localhost:1234/v1/chat/completions\n"
         f"  Last error: {last_err}"
     )
 
