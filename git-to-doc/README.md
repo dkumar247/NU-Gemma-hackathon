@@ -16,19 +16,19 @@ ollama pull gemma3:4b                 # or gemma4:12b, gemma4:31b
 echo "gemma3:4b" > .gemma-model
 
 # 1. Run it on the sample diff
-python main.py tests/fixtures/sample.diff
+python3 main.py tests/fixtures/sample.diff
 
 # 2. Run with no model at all (uses a fake response) to test the pipeline
-python main.py tests/fixtures/sample.diff --mock
+python3 main.py tests/fixtures/sample.diff --mock
 
 # 3. Write the output to a file as well as printing it
-python main.py tests/fixtures/sample.diff --out docs.md
+python3 main.py tests/fixtures/sample.diff --out docs.md
 
 # 4. Pipe a real diff directly from git (the strongest demo)
-git diff | python main.py -
+git diff | python3 main.py -
 
 # 5. Prepend the changelog snippet to a real changelog file
-python main.py tests/fixtures/sample.diff --append CHANGELOG.md
+python3 main.py tests/fixtures/sample.diff --append CHANGELOG.md
 ```
 
 If you see a Conventional Commit line and a changelog block printed, you're done.
@@ -84,12 +84,12 @@ If Person 2 renames a marker, Person 4 must update `parser.py` to match.
 ## Testing
 
 ```bash
-python tests/test_parser.py        # zero deps, prints PASS/FAIL
-python -m pytest tests/            # if pytest is installed
+python3 tests/test_parser.py        # zero deps, prints PASS/FAIL
+python3 -m pytest tests/            # if pytest is installed
 ```
 
 Person 5: drop the 5–10 organizer-provided diffs into `tests/fixtures/` and run
-`python main.py tests/fixtures/<name>.diff` against each during hardening.
+`python3 main.py tests/fixtures/<name>.diff` against each during hardening.
 
 ## Configuration
 
