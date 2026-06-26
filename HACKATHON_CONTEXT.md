@@ -59,7 +59,7 @@ Build highly focused micro-utilities that eliminate developer friction. Write cl
 
 | Phase | Time | Goal |
 |---|---|---|
-| Model Validation | 0:00 – 0:30 | Verify local Gemma instance (`ollama run gemma2:2b`), download sample datasets |
+| Model Validation | 0:00 – 0:30 | Verify local Gemma instance (`ollama run gemma`), download sample datasets |
 | Prompt Tuning | 0:30 – 2:00 | Tune system prompts for structured output (no conversational filler) |
 | Script Construction | 2:00 – 4:00 | Build core script logic: file I/O → model call → structured output |
 | Edge Case Hardening | 4:00 – 5:00 | Test on unseen samples, handle invalid JSON / truncated lines, prep repo |
@@ -70,7 +70,7 @@ Build highly focused micro-utilities that eliminate developer friction. Write cl
 
 ```bash
 # Verify local Gemma instance
-ollama run gemma2:2b
+ollama run gemma
 ```
 
 Confirm you receive text back before starting. Cloud endpoints also accepted if pre-allocated.
