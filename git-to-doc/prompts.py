@@ -20,6 +20,7 @@ SYSTEM_PROMPT = """You are a release-documentation generator. You read a git dif
 
 Rules:
 - Output ONLY the format the user asks for. No greetings, no explanation, no notes.
+- Do NOT show your reasoning or thinking. Do not output <think> tags. Output only the format.
 - Do NOT wrap the whole answer in a markdown code fence.
 - The commit line MUST follow Conventional Commits 1.0.0.
 - Allowed commit types: feat, fix, docs, style, refactor, perf, test, build, ci, chore, revert.
@@ -53,6 +54,11 @@ def build_user_prompt(diff_text):
 
 # ---------------------------------------------------------------------------
 # TUNING NOTES (Person 2 -- keep your experiments here)
+# - MIXED MODELS: our team runs different Gemmas (gemma3:4b, gemma4:12b,
+#   gemma4:31b). Tune and test this prompt against the SMALLEST model on the
+#   team (gemma3:4b). If the format is clean there, the bigger models -- which
+#   follow instructions better -- will handle it too. Then spot-check on one
+#   Gemma 4 model to confirm no stray reasoning tokens leak through.
 # - If the model adds a preamble, make the first system rule harsher.
 # - If the type is usually wrong, add 1-2 few-shot examples ABOVE "Git diff:".
 # - If subjects run long, restate the 72-char limit inside USER_TEMPLATE too.

@@ -1,0 +1,40 @@
+# --- Python ---
+__pycache__/
+*.py[cod]
+*$py.class
+*.egg-info/
+.pytest_cache/
+
+# Virtual environments
+.venv/
+venv/
+env/
+ENV/
+
+# --- Per-machine model selection (each dev sets their own; never commit) ---
+.gemma-model
+
+# --- Scratch / generated output ---
+# Write throwaway tool output here so it never gets committed:
+#   python git-to-doc/main.py <diff> --out scratch/out.md
+scratch/
+*.tmp
+
+# --- Editors / IDE ---
+.vscode/
+.idea/
+*.swp
+*~
+
+# --- Continue (assistant config/logs live in ~/.continue; ignore local copies) ---
+.continue/
+
+# --- OS junk ---
+.DS_Store
+Thumbs.db
+
+# --- Models & large binaries (NEVER commit these) ---
+*.gguf
+*.bin
+*.safetensors
+models/

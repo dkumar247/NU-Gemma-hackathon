@@ -36,8 +36,9 @@ def parse_args(argv):
     )
     p.add_argument("input", help="Path to a .diff or .txt file containing a git diff.")
     p.add_argument("--out", help="Also write the markdown output to this file.")
-    p.add_argument("--model", default=gemma_client.DEFAULT_MODEL,
-                   help=f"Ollama model name (default: {gemma_client.DEFAULT_MODEL}).")
+    p.add_argument("--model", default=None,
+                   help="Ollama model tag. If omitted, resolves from GEMMA_MODEL "
+                        "env, then a .gemma-model file, then a built-in default.")
     p.add_argument("--temperature", type=float, default=0.2,
                    help="Sampling temperature (default: 0.2; lower = more deterministic).")
     p.add_argument("--max-diff-chars", type=int, default=DEFAULT_MAX_DIFF_CHARS,
@@ -88,12 +89,19 @@ def main(argv=None):
         return 2
 
     user_prompt = prompts.build_user_prompt(diff_text)
-    caller = gemma_client.mock_call_gemma if args.mock else gemma_client.call_gemma
+
+    if args.mock:
+        caller = gemma_client.mock_call_gemma
+        model = "(mock)"
+    else:
+        caller = gemma_client.call_gemma
+        model = gemma_client.resolve_model(args.model)
+        print(f"[using model: {model}]", file=sys.stderr)
 
     try:
         raw = caller(
             user_prompt,
-            model=args.model,
+            model=None if args.mock else model,
             system=prompts.SYSTEM_PROMPT,
             temperature=args.temperature,
         )

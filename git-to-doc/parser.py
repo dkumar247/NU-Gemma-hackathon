@@ -3,11 +3,21 @@ parser.py  --  OWNER: Person 4 (Parser & validation)
 
 Turns the model's raw text into two clean pieces:
     {"commit": "<one line>", "changelog": "<markdown>"}
-
 and tells main.py whether the commit line is valid.
 
-You can build and test ALL of this offline against hardcoded strings or via
-`python main.py tests/fixtures/sample.diff --mock`. You do not need Ollama.
+MODEL-AGNOSTIC BY DESIGN
+------------------------
+Different Gemma sizes/generations format things differently, and the Gemma 4
+"thinking" models can emit reasoning (e.g. <think>...</think>) before the
+answer. This parser is built to survive all of that:
+  - it strips thinking/reasoning blocks,
+  - it strips a wrapping ``` code fence,
+  - it finds the COMMIT:/CHANGELOG: markers anchored to the START of a line
+    (so the word "COMMIT" buried in reasoning prose doesn't fool it),
+  - and it falls back gracefully if the markers are missing.
+
+You can build and test ALL of this offline:
+    python git-to-doc/main.py git-to-doc/tests/fixtures/sample.diff --mock
 
 Format contract (shared with prompts.py):
     COMMIT:
@@ -24,13 +34,23 @@ CONVENTIONAL_TYPES = [
     "perf", "test", "build", "ci", "chore", "revert",
 ]
 
-# type, optional (scope), optional !, then ": subject"
 CONVENTIONAL_RE = re.compile(
     r"^(?:" + "|".join(CONVENTIONAL_TYPES) + r")(?:\([\w\-./ ]+\))?(?:!)?: .+"
 )
 
-_COMMIT_MARKER = "COMMIT:"
-_CHANGELOG_MARKER = "CHANGELOG:"
+# Markers anchored to the start of a line, tolerating leading spaces / markdown
+# bullet or quote chars (so "- COMMIT:" or "> COMMIT:" still match).
+_COMMIT_RE = re.compile(r"(?im)^[ \t>*\-]*COMMIT:[ \t]*")
+_CHANGELOG_RE = re.compile(r"(?im)^[ \t>*\-]*CHANGELOG:[ \t]*")
+
+# Reasoning/thinking blocks emitted by "thinking" models (Gemma 4, etc.).
+_THINK_RE = re.compile(r"<\|?\s*think\s*\|?>.*?<\|?\s*/\s*think\s*\|?>",
+                       re.IGNORECASE | re.DOTALL)
+
+
+def strip_thinking(text):
+    """Remove <think>...</think> / <|think|>...<|/think|> reasoning blocks."""
+    return _THINK_RE.sub("", text)
 
 
 def strip_fences(text):
@@ -47,41 +67,51 @@ def strip_fences(text):
 
 
 def _clean_commit_line(block):
-    """From a block of text, pull the first real commit line.
-
-    Strips backticks, surrounding quotes, and leading list markers that small
-    models like to add.
-    """
+    """Pull the first real commit line from a block of text."""
     for line in block.splitlines():
         line = line.strip()
-        line = re.sub(r"^[-*]\s+", "", line)       # "- fix: x" -> "fix: x" (do this first)
-        line = line.strip("`").strip()             # then strip wrapping backticks
+        line = re.sub(r"^[-*]\s+", "", line)       # "- fix: x" -> "fix: x" (first)
+        line = line.strip("`").strip()             # then wrapping backticks
         line = line.strip('"').strip("'").strip()  # then wrapping quotes
         if line:
             return line
     return ""
 
 
+def _marker(text, regex, fallback):
+    """Find a marker via line-anchored regex, falling back to a plain search.
+
+    Returns (start, end) of the marker, or (-1, -1) if absent.
+    """
+    m = regex.search(text)
+    if m:
+        return m.start(), m.end()
+    idx = text.upper().find(fallback)
+    if idx != -1:
+        return idx, idx + len(fallback)
+    return -1, -1
+
+
 def parse_model_output(raw):
     """Split raw model text into {"commit", "changelog"}.
 
-    Robust to: missing markers, fenced answers, leading filler, list markers.
-    Never raises -- worst case it returns best-effort guesses for main.py to flag.
+    Robust to thinking blocks, fenced answers, leading filler, missing markers,
+    and list/quote decoration. Never raises -- worst case it returns best-effort
+    guesses for main.py to flag.
     """
-    text = strip_fences(raw)
-    upper = text.upper()
+    text = strip_fences(strip_thinking(raw))
 
-    ci = upper.find(_COMMIT_MARKER)
-    cl = upper.find(_CHANGELOG_MARKER)
+    c_start, c_end = _marker(text, _COMMIT_RE, "COMMIT:")
+    l_start, l_end = _marker(text, _CHANGELOG_RE, "CHANGELOG:")
 
-    if ci != -1 and cl != -1 and cl > ci:
-        commit_block = text[ci + len(_COMMIT_MARKER):cl].strip()
-        changelog = text[cl + len(_CHANGELOG_MARKER):].strip()
-    elif ci != -1:
-        commit_block = text[ci + len(_COMMIT_MARKER):].strip()
+    if c_start != -1 and l_start != -1 and l_start > c_end:
+        commit_block = text[c_end:l_start].strip()
+        changelog = text[l_end:].strip()
+    elif c_start != -1:
+        commit_block = text[c_end:].strip()
         changelog = ""
     else:
-        # No markers at all: first non-empty line = commit, the rest = changelog.
+        # No COMMIT marker: first non-empty line = commit, the rest = changelog.
         lines = text.splitlines()
         commit_block, rest_start = "", 0
         for idx, line in enumerate(lines):
@@ -109,11 +139,7 @@ def validate_commit(commit):
 
 
 def salvage_commit(commit):
-    """Best-effort coercion to a valid commit, used as a fallback in hardening.
-
-    Never invents detail -- it just makes the line syntactically valid so the
-    pipeline always emits *something* usable, clearly flagged by main.py.
-    """
+    """Best-effort coercion to a valid commit, used as a fallback in hardening."""
     if not commit:
         return "chore: update code"
     subject = commit.splitlines()[0].strip()

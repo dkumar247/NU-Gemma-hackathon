@@ -1,19 +1,19 @@
 """
 tests/test_parser.py  --  OWNER: Person 5 (QA), with Person 4
 
-Tests for the parsing/validation logic. These are the cases the model WILL
-throw at you during hardening (Hour 4-5): fenced output, leading filler,
-missing markers, backtick-wrapped commits, over-length subjects.
+Tests for the parsing/validation logic -- the cases the model WILL throw at you
+during hardening: fenced output, leading filler, missing markers, backtick-
+wrapped commits, over-length subjects, and (for Gemma 4 "thinking" models)
+reasoning tokens before the answer.
 
 Run either way:
-    python tests/test_parser.py        # zero dependencies, prints PASS/FAIL
-    python -m pytest tests/            # if you have pytest installed
+    python git-to-doc/tests/test_parser.py     # zero deps, prints PASS/FAIL
+    python -m pytest git-to-doc/tests/         # if you have pytest installed
 """
 
 import os
 import sys
 
-# Make the package importable whether run from repo root or tests/.
 sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
 import parser as out_parser  # noqa: E402
@@ -78,6 +78,38 @@ def test_validate_rejects_overlong_subject():
 def test_salvage_makes_invalid_commit_valid():
     salvaged = out_parser.salvage_commit("fixed a bug")
     assert out_parser.validate_commit(salvaged)[0] is True
+
+
+# --- Model-independence: Gemma 4 "thinking" model output ---------------------
+
+def test_strips_xml_thinking_block():
+    raw = (
+        "<think>The diff adds a null check. Best type is fix, scope parser.</think>\n"
+        "COMMIT:\nfix(parser): add null check\n\n"
+        "CHANGELOG:\n### Fixed\n- add null check\n"
+    )
+    result = out_parser.parse_model_output(raw)
+    assert result["commit"] == "fix(parser): add null check"
+    assert "think" not in result["changelog"].lower()
+
+
+def test_strips_pipe_thinking_block():
+    raw = (
+        "<|think|>reasoning about the change here<|/think|>\n"
+        "COMMIT:\nperf: cache results\n\nCHANGELOG:\n### Changed\n- cache results\n"
+    )
+    result = out_parser.parse_model_output(raw)
+    assert result["commit"] == "perf: cache results"
+
+
+def test_word_commit_in_reasoning_not_confused():
+    raw = (
+        "I will now produce the COMMIT message for this change.\n"
+        "COMMIT:\ndocs: clarify setup steps\n\n"
+        "CHANGELOG:\n### Changed\n- clarify setup steps\n"
+    )
+    result = out_parser.parse_model_output(raw)
+    assert result["commit"] == "docs: clarify setup steps"
 
 
 def _run_all():

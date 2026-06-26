@@ -1,0 +1,34 @@
+# Continue config for the NU-Gemma hackathon.
+#
+# This is your CODING ASSISTANT config (autocomplete + chat in VS Code).
+# It is NOT part of our app and does NOT belong in the repo's working tree.
+#
+# Install it per-person:
+#   VS Code -> Command Palette (Ctrl/Cmd+Shift+P) -> "Continue: Open Config"
+#   That opens ~/.continue/config.yaml -- paste this in and save.
+#
+# Make sure the models below are pulled first:
+#   ollama pull gemma3:4b
+#   ollama pull qwen2.5-coder:1.5b      # optional, for snappy autocomplete
+
+name: NU-Gemma Hackathon
+version: 0.0.1
+schema: v1
+models:
+  - name: Gemma Chat
+    provider: ollama
+    model: gemma3:4b      # set to whatever YOU pulled (gemma4:12b, gemma4:31b, ...)
+    roles:
+      - chat
+      - edit
+
+  # Optional: a small, fast model dedicated to inline autocomplete.
+  # Big models make autocomplete laggy; a 1.5B coder keeps it under ~500ms.
+  - name: Fast Autocomplete
+    provider: ollama
+    model: qwen2.5-coder:1.5b
+    roles:
+      - autocomplete
+
+  # To point at a teammate's machine instead of your own Ollama, add:
+  #   apiBase: http://<their-ip>:11434
