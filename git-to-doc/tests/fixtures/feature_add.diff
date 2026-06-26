@@ -1,0 +1,8 @@
+diff --git a/auth.py b/auth.py
+--- a/auth.py
++++ b/auth.py
+@@ -0,0 +1,8 @@
++def login(username, password):
++    if not username or not password:
++        raise ValueError("Credentials required")
++    return authenticate(username, password)
