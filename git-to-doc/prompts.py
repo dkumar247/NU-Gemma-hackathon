@@ -69,6 +69,43 @@ def build_user_prompt(diff_text):
 
 
 # ---------------------------------------------------------------------------
+# SELF-HEALING REPAIR (the differentiator)
+# When the parser/validator rejects the model's output, main.py calls Gemma a
+# SECOND time with this prompt -- handing back the bad output + the reason so the
+# model can correct itself. The format RULES come from SYSTEM_PROMPT (passed via
+# call_gemma's system=...), so this prompt deliberately does NOT re-show a format
+# template -- that avoids re-introducing the placeholder-copy bug.
+# ---------------------------------------------------------------------------
+REPAIR_TEMPLATE = """Your previous attempt was REJECTED.
+Reason: {reason}
+
+Your previous (rejected) answer was:
+--- BEGIN REJECTED ANSWER ---
+{bad_output}
+--- END REJECTED ANSWER ---
+
+Do it again correctly, fixing exactly that problem. Follow the instructions and
+the example below precisely, including the multi-line COMMIT:/CHANGELOG: shape
+with a "### Heading" and bullet points.
+
+{original_prompt}
+"""
+
+
+def build_repair_prompt(diff_text, bad_output, reason):
+    """Build a correction prompt after a rejected attempt. Person 3 calls this
+    on retry, passing the SAME diff, the model's bad output, and the validator's
+    reason. Reuses the full original prompt (worked example included) so the
+    repaired answer keeps full format quality. Pair with SYSTEM_PROMPT via
+    call_gemma(system=...)."""
+    return REPAIR_TEMPLATE.format(
+        reason=reason,
+        bad_output=bad_output,
+        original_prompt=build_user_prompt(diff_text),
+    )
+
+
+# ---------------------------------------------------------------------------
 # TUNING NOTES (Person 2 -- keep your experiments here)
 # - MIXED MODELS: our team runs different Gemmas (gemma3:4b, gemma4:12b,
 #   gemma4:31b). Tune and test this prompt against the SMALLEST model on the
