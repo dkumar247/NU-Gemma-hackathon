@@ -1,0 +1,23 @@
+diff --git a/docs/tutorial/layout.rst b/docs/tutorial/layout.rst
+index 6f8e59f..9f51092 100644
+--- a/docs/tutorial/layout.rst
++++ b/docs/tutorial/layout.rst
+@@ -81,8 +81,7 @@ By the end, your project layout will look like this:
+     │   ├── test_auth.py
+     │   └── test_blog.py
+     ├── .venv/
+-    ├── pyproject.toml
+-    └── MANIFEST.in
++    └── pyproject.toml
+ 
+ If you're using version control, the following files that are generated
+ while running your project should be ignored. There may be other files
+@@ -103,8 +102,4 @@ write. For example, with git:
+     .coverage
+     htmlcov/
+ 
+-    dist/
+-    build/
+-    *.egg-info/
+-
+ Continue to :doc:`factory`.
