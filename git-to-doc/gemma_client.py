@@ -84,7 +84,7 @@ def call_gemma(
     model=None,
     system=None,
     temperature=0.2,
-    timeout=180,
+    timeout=300,
     retries=2,
     show_live=True,
 ):

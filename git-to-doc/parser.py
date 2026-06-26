@@ -138,6 +138,16 @@ def validate_commit(commit):
     return True, "ok"
 
 
+_KEYWORD_TYPE_MAP = [
+    (re.compile(r"\b(fix|bug|patch|error|crash)\b", re.I), "fix"),
+    (re.compile(r"\b(feat|add|new|implement)\b", re.I),    "feat"),
+    (re.compile(r"\b(refactor|restructur|clean)", re.I),    "refactor"),
+    (re.compile(r"\b(test|spec|coverage)\b", re.I),        "test"),
+    (re.compile(r"\b(doc|readme|comment)\b", re.I),        "docs"),
+    (re.compile(r"\b(perf|speed|optim)", re.I),            "perf"),
+]
+
+
 def salvage_commit(commit):
     """Best-effort coercion to a valid commit, used as a fallback in hardening."""
     if not commit:
@@ -145,4 +155,7 @@ def salvage_commit(commit):
     subject = commit.splitlines()[0].strip()
     if CONVENTIONAL_RE.match(subject):
         return subject
+    for pattern, ctype in _KEYWORD_TYPE_MAP:
+        if pattern.search(subject):
+            return f"{ctype}: {subject[:64]}"
     return "chore: " + subject[:64]
