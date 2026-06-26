@@ -138,6 +138,22 @@ def validate_commit(commit):
     return True, "ok"
 
 
+_CHANGELOG_MIN_CHARS = 20
+# At least one markdown list item, heading, or bold marker.
+_CHANGELOG_CONTENT_RE = re.compile(r"(^#{1,6}\s+\S|^[-*+]\s+\S|^\d+\.\s+\S|\*\*\S)", re.MULTILINE)
+
+
+def validate_changelog(changelog):
+    """Return (is_valid, reason). Mirrors validate_commit's contract."""
+    if not changelog or not changelog.strip():
+        return False, "empty changelog"
+    if len(changelog.strip()) < _CHANGELOG_MIN_CHARS:
+        return False, f"changelog too short ({len(changelog.strip())} chars, minimum {_CHANGELOG_MIN_CHARS})"
+    if not _CHANGELOG_CONTENT_RE.search(changelog):
+        return False, "no markdown structure found (expected a heading, list item, or bold text)"
+    return True, "ok"
+
+
 _KEYWORD_TYPE_MAP = [
     (re.compile(r"\b(fix|bug|patch|error|crash)\b", re.I), "fix"),
     (re.compile(r"\b(feat|add|new|implement)\b", re.I),    "feat"),
