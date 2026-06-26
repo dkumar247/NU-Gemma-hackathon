@@ -167,14 +167,16 @@ def main(argv=None):
         changelog = result["changelog"].strip()
         if os.path.isfile(args.append):
             with open(args.append, "r", encoding="utf-8") as f:
-                existing = f.read()
+                existing = f.read().rstrip()
             lines = existing.splitlines(keepends=True)
             if lines and lines[0].startswith("# "):
-                content = lines[0] + "\n" + changelog + "\n\n" + "".join(lines[1:])
+                # Insert after heading, strip leading blank from rest to avoid double blank
+                rest = "".join(lines[1:]).lstrip("\n")
+                content = lines[0] + "\n" + changelog + "\n\n" + rest + "\n"
             else:
-                content = changelog + "\n\n" + existing
+                content = changelog + "\n\n" + existing + "\n"
         else:
-            content = changelog + "\n"
+            content = "# Changelog\n\n" + changelog + "\n"
         with open(args.append, "w", encoding="utf-8") as f:
             f.write(content)
         print(f"[changelog prepended to {args.append}]", file=sys.stderr)
