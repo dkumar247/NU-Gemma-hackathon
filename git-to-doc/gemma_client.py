@@ -151,14 +151,14 @@ def call_gemma(
     )
 
 
-def mock_call_gemma(prompt, **_kwargs):
-    """A fake model for offline work (used via --mock). Format matches prompts.py."""
-    return (
-        "COMMIT:\n"
-        "fix(parser): guard against empty input before json decode\n"
-        "\n"
-        "CHANGELOG:\n"
-        "### Fixed\n"
-        "- Return `None` for empty parser input instead of raising on `json.loads`\n"
-        "- Use `dict.get` so a missing `result` key no longer throws `KeyError`\n"
-    )
+# def mock_call_gemma(prompt, **_kwargs):
+#     """A fake model for offline work (used via --mock). Format matches prompts.py."""
+#     return (
+#         "COMMIT:\n"
+#         "fix(parser): guard against empty input before json decode\n"
+#         "\n"
+#         "CHANGELOG:\n"
+#         "### Fixed\n"
+#         "- Return `None` for empty parser input instead of raising on `json.loads`\n"
+#         "- Use `dict.get` so a missing `result` key no longer throws `KeyError`\n"
+#     )
