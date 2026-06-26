@@ -1,0 +1,19 @@
+diff --git a/app/parser.py b/app/parser.py
+index 3f2a1b4..9c4d2e7 100644
+--- a/app/parser.py
++++ b/app/parser.py
+@@ -8,9 +8,12 @@ import json
+ 
+ def parse_json(raw):
+     """Parse a raw JSON string and return its 'result' field."""
+-    data = json.loads(raw)
+-    return data["result"]
++    if not raw:
++        return None
++    data = json.loads(raw)
++    return data.get("result")
+ 
+ 
+ def load_config(path):
+     with open(path) as f:
+         return parse_json(f.read())

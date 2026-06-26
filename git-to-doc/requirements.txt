@@ -1,0 +1,5 @@
+# git-to-doc requires NO third-party packages.
+# It runs on the Python 3.8+ standard library, so `git clone` + run just works.
+#
+# Optional, only if you prefer pytest over the built-in test runner:
+# pytest>=7.0
