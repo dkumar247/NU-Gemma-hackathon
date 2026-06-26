@@ -2,11 +2,11 @@
 prompts.py  --  OWNER: Person 2 (Prompt engineer)
 
 This is the highest-leverage file in the project. Your whole job is to make
-gemma2:2b emit the COMMIT/CHANGELOG block below with NO conversational filler
+gemma3:4b emit the COMMIT/CHANGELOG block below with NO conversational filler
 ("Sure, here is...") and a valid Conventional Commit line.
 
 How to iterate fast (you are never blocked waiting on code):
-    1. Open a terminal:  ollama run gemma2:2b
+    1. Open a terminal:  ollama run gemma3:4b
     2. Paste SYSTEM_PROMPT, then a USER_TEMPLATE filled with a real diff.
     3. Tweak wording here until the output is clean and parseable.
     4. The parser (parser.py) keys off the literal markers `COMMIT:` and
@@ -26,19 +26,35 @@ Rules:
 - Allowed commit types: feat, fix, docs, style, refactor, perf, test, build, ci, chore, revert.
 - Commit subject: lowercase, imperative mood ("add", not "adds"/"added"), under 72 characters, no trailing period.
 - Pick the single most important change for the commit subject.
+- Describe the ACTUAL diff provided. Never copy the example wording or any placeholder text.
+- Never output angle brackets (< or >) around your answer.
+- ALWAYS output both a COMMIT: section and a CHANGELOG: section. Never stop after the commit.
+- The changelog ### heading MUST be exactly one of: Added, Fixed, Changed, Removed, Deprecated, Security. Never invent another heading (use Changed for documentation edits).
 """
 
-USER_TEMPLATE = """Analyze this git diff and produce documentation.
+USER_TEMPLATE = """Analyze the git diff at the bottom and produce documentation for IT.
 
-Output EXACTLY this structure and nothing before or after it:
+Output two sections only: a COMMIT: section, then a CHANGELOG: section. Nothing before COMMIT: and nothing after the last changelog bullet.
 
+Below is ONE complete example showing the exact format. Do NOT reuse its wording -- it is only there to show the shape. Describe the real diff instead.
+
+--- EXAMPLE INPUT ---
+diff --git a/cache.py b/cache.py
+@@ -8,6 +8,8 @@ def get(self, key):
+-        return self.store[key]
++        if key not in self.store:
++            return None
++        return self.store[key]
+--- EXAMPLE OUTPUT ---
 COMMIT:
-<one Conventional Commit line, e.g. fix(parser): handle empty input>
+fix(cache): return None for missing keys
 
 CHANGELOG:
-### <one of: Added, Fixed, Changed, Removed, Deprecated, Security>
-- <short bullet describing the change>
-- <another bullet if needed>
+### Fixed
+- Return None instead of raising when a cache key is missing
+--- END EXAMPLE ---
+
+Now document the diff below in that same format. The ### heading must be one of: Added, Fixed, Changed, Removed, Deprecated, Security.
 
 Git diff:
 ---
