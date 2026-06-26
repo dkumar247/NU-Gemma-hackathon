@@ -38,3 +38,7 @@ Thumbs.db
 *.bin
 *.safetensors
 models/
+
+# --- Local context / notes (personal reference, never commit) ---
+context.md
+CONTEXT.md
