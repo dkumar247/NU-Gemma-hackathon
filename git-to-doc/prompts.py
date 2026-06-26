@@ -2,11 +2,11 @@
 prompts.py  --  OWNER: Person 2 (Prompt engineer)
 
 This is the highest-leverage file in the project. Your whole job is to make
-gemma2:2b emit the COMMIT/CHANGELOG block below with NO conversational filler
+Gemma emit the COMMIT/CHANGELOG block below with NO conversational filler
 ("Sure, here is...") and a valid Conventional Commit line.
 
 How to iterate fast (you are never blocked waiting on code):
-    1. Open a terminal:  ollama run gemma2:2b
+    1. Open a terminal:  ollama run <your-model>  # e.g. gemma3:4b, gemma4:12b
     2. Paste SYSTEM_PROMPT, then a USER_TEMPLATE filled with a real diff.
     3. Tweak wording here until the output is clean and parseable.
     4. The parser (parser.py) keys off the literal markers `COMMIT:` and

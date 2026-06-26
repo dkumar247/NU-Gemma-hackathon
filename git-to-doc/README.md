@@ -1,25 +1,34 @@
 # git-to-doc
 
 Turn a raw `git diff` into a clean **Conventional Commit message** + a **markdown
-changelog snippet**, using a local Gemma model (`gemma2:2b` via Ollama).
+changelog snippet**, using a local Gemma model (Ollama or LM Studio).
 
 Pure CLI, no UI. Zero third-party dependencies (Python 3.8+ stdlib only).
 
 ## Quickstart
 
 ```bash
-# 0. One-time: make sure Ollama is running and the model is pulled
-ollama serve            # in one terminal (if not already running)
-ollama pull gemma2:2b
+# 0. One-time: make sure your model server is running and the model is loaded
+ollama serve                          # Ollama
+ollama pull gemma3:4b                 # or gemma4:12b, gemma4:31b
+
+# Tell the tool which model you're running (gitignored, no code edits needed)
+echo "gemma3:4b" > .gemma-model
 
 # 1. Run it on the sample diff
 python main.py tests/fixtures/sample.diff
 
-# 2. Or run with no model at all (uses a fake response) to test the pipeline
+# 2. Run with no model at all (uses a fake response) to test the pipeline
 python main.py tests/fixtures/sample.diff --mock
 
 # 3. Write the output to a file as well as printing it
 python main.py tests/fixtures/sample.diff --out docs.md
+
+# 4. Pipe a real diff directly from git (the strongest demo)
+git diff | python main.py -
+
+# 5. Prepend the changelog snippet to a real changelog file
+python main.py tests/fixtures/sample.diff --append CHANGELOG.md
 ```
 
 If you see a Conventional Commit line and a changelog block printed, you're done.
@@ -27,14 +36,20 @@ If you see a Conventional Commit line and a changelog block printed, you're done
 ## How it works
 
 ```
-.diff file ─▶ main.py ─▶ prompts.py ─▶ gemma_client.py ─▶ (Ollama / gemma2:2b)
+.diff file ─▶ main.py ─▶ prompts.py ─▶ gemma_client.py ─▶ (Ollama / LM Studio)
                  ▲                                                  │
                  └──────────── parser.py ◀───── raw model text ◀────┘
 ```
 
-`main.py` reads the file, `prompts.py` builds the instruction, `gemma_client.py`
-calls the model, `parser.py` extracts + validates the result, and `main.py`
-renders the markdown.
+`main.py` reads the file, filters lockfiles, `prompts.py` builds the instruction,
+`gemma_client.py` calls the model, `parser.py` extracts + validates the result,
+and `main.py` renders the markdown.
+
+### Auto-filtering of lockfiles
+
+Lockfiles (`*.lock`, `uv.lock`, `Pipfile.lock`, `package-lock.json`, etc.) are
+automatically removed from the diff before processing. They add size without
+useful signal. Skipped files are reported to stderr.
 
 ## Who owns what (5-person split)
 
@@ -44,9 +59,9 @@ minutes and then don't change it without telling the team.**
 
 | Person | File | Owns | Can start immediately because... |
 |--------|------|------|----------------------------------|
-| 1 | `gemma_client.py` | Ollama call, retries, timeouts, errors | it's the critical path; ship `call_gemma` first |
+| 1 | `gemma_client.py` | Ollama/LM Studio call, retries, timeouts, errors | it's the critical path; ship `call_gemma` first |
 | 2 | `prompts.py` | system prompt + template; killing filler | iterate in `ollama run` with no code needed |
-| 3 | `main.py` | argparse, file I/O, diff truncation, rendering | builds the skeleton against `--mock` |
+| 3 | `main.py` | argparse, file I/O, filtering, truncation, rendering | builds the skeleton against `--mock` |
 | 4 | `parser.py` | split output, strip fences, validate commit | works against hardcoded strings + `--mock` |
 | 5 | `tests/`, this README, repo hygiene, demo | curates real diffs, runs everything, logs failures | `--mock` makes the pipeline runnable on minute 1 |
 
@@ -78,28 +93,44 @@ Person 5: drop the 5–10 organizer-provided diffs into `tests/fixtures/` and ru
 
 ## Configuration
 
-Point at a remote Ollama or a pre-allocated cloud endpoint **without editing
+Point at a remote Ollama, LM Studio, or shared endpoint **without editing
 code** via environment variables:
 
 ```bash
-export OLLAMA_URL="http://my-host:11434/api/generate"
-export GEMMA_MODEL="gemma2:2b"
+# Ollama (default)
+export OLLAMA_URL="http://localhost:11434/api/generate"
+
+# LM Studio
+export OLLAMA_URL="http://localhost:1234/v1/chat/completions"
+
+# Shared Ollama server (one machine hosts, everyone else connects)
+export OLLAMA_URL="http://192.168.X.X:11434/api/generate"
+
+# Force backend explicitly
+export BACKEND="lmstudio"   # or "ollama"
+
+# Override model
+export GEMMA_MODEL="gemma4:12b"
 ```
 
-CLI flags: `--model`, `--temperature`, `--max-diff-chars`, `--out`, `--mock`.
+Backend is auto-detected from `OLLAMA_URL` — if it contains `/v1/` it uses
+LM Studio (OpenAI-compatible) format, otherwise Ollama format.
+
+CLI flags: `--model`, `--temperature`, `--max-diff-chars`, `--out`, `--append`, `--mock`.
 
 ## Troubleshooting
 
-- **`Could not get a usable response from Ollama`** — run `ollama serve` and
-  `ollama pull gemma2:2b`, then retry.
+- **`Could not get a usable response`** — confirm your model server is running
+  and `OLLAMA_URL` points to the correct endpoint.
 - **Commit shows a `:warning:` "auto-corrected" note** — the model produced an
   invalid commit line; tighten `SYSTEM_PROMPT` in `prompts.py`.
-- **Big diff seems ignored** — it was truncated to fit the context window; raise
-  `--max-diff-chars` or trim the diff to the relevant hunk.
+- **`[diff truncated]` warning** — diff exceeded `--max-diff-chars`; raise the
+  limit or trim the diff to the relevant hunk.
+- **`[skipped generated files]`** — lockfiles were filtered automatically; this
+  is expected and keeps Gemma focused on real code changes.
 
 ## Stretch goals (if you finish early)
 
-- `--append CHANGELOG.md` to prepend the snippet into a real changelog file.
 - Batch mode: accept a directory of diffs and write one doc per file.
 - A second validation pass that re-prompts the model when the commit is invalid,
   instead of falling back to `salvage_commit`.

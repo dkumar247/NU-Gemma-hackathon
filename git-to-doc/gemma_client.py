@@ -2,17 +2,31 @@
 gemma_client.py  --  OWNER: Person 1 (Model engine)
 
 The ONLY job of this file is to turn a prompt into text from Gemma.
-Everyone else calls `call_gemma(...)` and never touches Ollama directly.
+Everyone else calls `call_gemma(...)` and never touches the backend directly.
 
-MODEL-AGNOSTIC: each teammate runs whatever Gemma they have (gemma3:4b,
-gemma4:12b, gemma4:31b) via a gitignored `.gemma-model` file -- no code edits.
+BACKEND SUPPORT
+---------------
+Works with both Ollama and LM Studio (OpenAI-compatible). Auto-detected from
+OLLAMA_URL — if it contains /v1/ it uses LM Studio format, otherwise Ollama.
+Force with: export BACKEND=lmstudio  or  export BACKEND=ollama
+
+    Ollama:    export OLLAMA_URL=http://localhost:11434/api/generate
+    LM Studio: export OLLAMA_URL=http://localhost:1234/v1/chat/completions
+    Shared:    export OLLAMA_URL=http://192.168.X.X:11434/api/generate
+
+MODEL-AGNOSTIC
+--------------
+Each teammate runs whatever Gemma they have (gemma3:4b, gemma4:12b, gemma4:31b)
+via a gitignored `.gemma-model` file — no code edits needed.
 Resolution order: --model flag > GEMMA_MODEL env > ./.gemma-model file > default.
 The file is read robustly so it works even when Windows PowerShell saves it as
 UTF-16 with a BOM (the classic `echo "tag" > .gemma-model` gotcha).
 
-STREAMING: call_gemma streams the model's output and prints it live to the
-screen as it generates (so a slow model doesn't look frozen), while still
-returning the COMPLETE text string -- so main.py and parser.py are unchanged.
+STREAMING
+---------
+Ollama backend streams output live to stderr as it generates (so a slow model
+doesn't look frozen) while still returning the complete text string.
+LM Studio backend uses a single non-streaming request.
 
 Zero third-party dependencies (Python stdlib only).
 """

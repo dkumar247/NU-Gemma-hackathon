@@ -9,13 +9,16 @@ Usage:
     python main.py path/to/change.diff
     python main.py change.diff --out docs.md
     python main.py change.diff --mock           # no Ollama needed
-    python main.py change.diff --model gemma2:2b --temperature 0.1
+    python main.py change.diff --model gemma4:12b --temperature 0.1
     python main.py change.diff --append CHANGELOG.md
     git diff | python main.py -                 # stdin support
 
-This file owns argument parsing, file I/O, diff truncation, and the final
-markdown rendering. It calls into the other three modules and does not contain
-any Ollama or regex logic itself.
+This file owns argument parsing, file I/O, diff truncation, lockfile filtering,
+and the final markdown rendering. It calls into the other three modules and does
+not contain any Ollama or regex logic itself.
+
+AUTO-FILTERING: lockfiles (*.lock, uv.lock, Pipfile.lock, etc.) are stripped
+from the diff before sending to Gemma — they add size without useful signal.
 """
 
 import argparse
