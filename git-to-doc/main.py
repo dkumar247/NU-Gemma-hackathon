@@ -10,6 +10,8 @@ Usage:
     python main.py change.diff --out docs.md
     python main.py change.diff --mock           # no Ollama needed
     python main.py change.diff --model gemma2:2b --temperature 0.1
+    python main.py change.diff --append CHANGELOG.md
+    git diff | python main.py -                 # stdin support
 
 This file owns argument parsing, file I/O, diff truncation, and the final
 markdown rendering. It calls into the other three modules and does not contain
@@ -45,17 +47,24 @@ def parse_args(argv):
                    help=f"Truncate diffs longer than this (default: {DEFAULT_MAX_DIFF_CHARS}).")
     p.add_argument("--mock", action="store_true",
                    help="Use a fake model response instead of calling Ollama.")
+    p.add_argument("--append", metavar="FILE",
+                   help="Prepend the changelog snippet to this file.")
     return p.parse_args(argv)
 
 
 def read_input(path, max_chars):
-    """Read the diff file, truncating if it's too big for the context window."""
-    if not os.path.isfile(path):
-        raise SystemExit(f"Error: file not found: {path}")
-    with open(path, "r", encoding="utf-8", errors="replace") as f:
-        text = f.read()
+    """Read the diff file or stdin, truncating if it's too big for the context window."""
+    if path == "-":
+        text = sys.stdin.read()
+    else:
+        if not os.path.isfile(path):
+            raise SystemExit(f"Error: file not found: {path}")
+        with open(path, "r", encoding="utf-8", errors="replace") as f:
+            text = f.read()
     if max_chars and len(text) > max_chars:
+        original_size = len(text)
         text = text[:max_chars] + "\n\n[... diff truncated for model context ...]"
+        print(f"[diff truncated: {original_size} → {max_chars} chars]", file=sys.stderr)
     return text
 
 
@@ -124,6 +133,22 @@ def main(argv=None):
         with open(args.out, "w", encoding="utf-8") as f:
             f.write(markdown)
         print(f"\n[written to {args.out}]", file=sys.stderr)
+
+    if args.append:
+        changelog = result["changelog"].strip()
+        if os.path.isfile(args.append):
+            with open(args.append, "r", encoding="utf-8") as f:
+                existing = f.read()
+            lines = existing.splitlines(keepends=True)
+            if lines and lines[0].startswith("# "):
+                content = lines[0] + "\n" + changelog + "\n\n" + "".join(lines[1:])
+            else:
+                content = changelog + "\n\n" + existing
+        else:
+            content = changelog + "\n"
+        with open(args.append, "w", encoding="utf-8") as f:
+            f.write(content)
+        print(f"[changelog prepended to {args.append}]", file=sys.stderr)
 
     return 0
 
