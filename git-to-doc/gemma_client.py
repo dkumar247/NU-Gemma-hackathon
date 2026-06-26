@@ -4,30 +4,23 @@ gemma_client.py  --  OWNER: Person 1 (Model engine)
 The ONLY job of this file is to turn a prompt into text from Gemma.
 Everyone else calls `call_gemma(...)` and never touches Ollama directly.
 
-MODEL-AGNOSTIC BY DESIGN
-------------------------
-This code does NOT hardcode a model. Each teammate runs whatever Gemma they
-have (gemma3:4b, gemma4:12b, gemma4:31b, ...) WITHOUT editing this file, so the
-code stays identical for everyone and never causes merge conflicts.
+MODEL-AGNOSTIC: each teammate runs whatever Gemma they have (gemma3:4b,
+gemma4:12b, gemma4:31b) via a gitignored `.gemma-model` file -- no code edits.
+Resolution order: --model flag > GEMMA_MODEL env > ./.gemma-model file > default.
+The file is read robustly so it works even when Windows PowerShell saves it as
+UTF-16 with a BOM (the classic `echo "tag" > .gemma-model` gotcha).
 
-The model is resolved in this priority order (first one wins):
-    1. the --model CLI flag            (explicit, one-off override)
-    2. the GEMMA_MODEL env variable    (per-shell)
-    3. a local `.gemma-model` file     (per-machine; gitignored)  <-- easiest
-    4. DEFAULT_MODEL below             (safe fallback)
-
-So the 31B person just puts `gemma4:31b` in a `.gemma-model` file at the repo
-root, the 4B person puts `gemma3:4b`, and nobody changes a line of code.
+STREAMING: call_gemma streams the model's output and prints it live to the
+screen as it generates (so a slow model doesn't look frozen), while still
+returning the COMPLETE text string -- so main.py and parser.py are unchanged.
 
 Zero third-party dependencies (Python stdlib only).
-
-Config via environment:
-    OLLAMA_URL   default http://localhost:11434/api/generate
-    GEMMA_MODEL  overrides the resolved model (see above)
 """
 
+import codecs
 import json
 import os
+import sys
 import time
 import urllib.error
 import urllib.request
@@ -39,6 +32,26 @@ _MODEL_FILE = ".gemma-model"          # per-machine, gitignored
 
 class GemmaError(RuntimeError):
     """Raised when we cannot get usable text out of the model."""
+
+
+def _read_text_robust(path):
+    """Read a small text file regardless of how it was encoded/saved.
+
+    Handles UTF-8, UTF-8-with-BOM, and UTF-16 (with or without BOM) -- the
+    last of which is what Windows PowerShell's `>` redirection produces. Strips
+    BOM characters and stray null bytes, then whitespace.
+    """
+    with open(path, "rb") as f:
+        raw = f.read()
+    if not raw:
+        return ""
+    if raw.startswith(codecs.BOM_UTF16_LE) or raw.startswith(codecs.BOM_UTF16_BE):
+        text = raw.decode("utf-16", errors="ignore")
+    elif raw.startswith(codecs.BOM_UTF8):
+        text = raw.decode("utf-8-sig", errors="ignore")
+    else:
+        text = raw.decode("utf-8", errors="ignore")
+    return text.replace("\ufeff", "").replace("\x00", "").strip()
 
 
 def resolve_model(cli_value=None):
@@ -53,15 +66,13 @@ def resolve_model(cli_value=None):
     if env and env.strip():
         return env.strip()
 
-    # Look for a local model file in the current dir and the repo root.
     here = os.path.dirname(os.path.abspath(__file__))
     for candidate in (_MODEL_FILE, os.path.join(here, _MODEL_FILE),
                       os.path.join(here, "..", _MODEL_FILE)):
         try:
-            with open(candidate, "r", encoding="utf-8") as f:
-                val = f.read().strip()
-                if val:
-                    return val
+            val = _read_text_robust(candidate)
+            if val:
+                return val
         except OSError:
             continue
 
@@ -75,22 +86,19 @@ def call_gemma(
     temperature=0.2,
     timeout=180,
     retries=2,
+    show_live=True,
 ):
-    """Send `prompt` to Ollama's /api/generate and return the response text.
+    """Send `prompt` to Ollama and return the model's full response text.
 
-    `model=None` means "resolve it" (see resolve_model). Passing an explicit
-    model overrides resolution. Uses /api/generate with a `system` field, which
-    Ollama maps correctly for every Gemma generation (it owns the chat template),
-    so this works unchanged across gemma2 / gemma3 / gemma4.
-
-    A low default temperature keeps structured output stable regardless of the
-    model's own "recommended" sampling settings.
+    Streams the response: each chunk is printed live to stderr as it arrives
+    (set show_live=False to silence it, e.g. in batch mode), and the full text
+    is assembled and returned so callers get one complete string as before.
     """
     model = resolve_model(model)
     payload = {
         "model": model,
         "prompt": prompt,
-        "stream": False,
+        "stream": True,                       # <-- stream chunk by chunk
         "options": {"temperature": temperature},
     }
     if system:
@@ -106,9 +114,24 @@ def call_gemma(
                 data=data,
                 headers={"Content-Type": "application/json"},
             )
+            chunks = []
             with urllib.request.urlopen(req, timeout=timeout) as resp:
-                body = json.loads(resp.read().decode("utf-8"))
-            text = (body.get("response") or "").strip()
+                # Ollama sends one JSON object per line as it generates.
+                for line in resp:
+                    line = line.strip()
+                    if not line:
+                        continue
+                    obj = json.loads(line.decode("utf-8"))
+                    piece = obj.get("response", "")
+                    if piece:
+                        chunks.append(piece)
+                        if show_live:
+                            print(piece, end="", file=sys.stderr, flush=True)
+                    if obj.get("done"):
+                        break
+            if show_live:
+                print("", file=sys.stderr)     # newline after the live stream
+            text = "".join(chunks).strip()
             if not text:
                 raise GemmaError("Model returned an empty response.")
             return text
@@ -122,7 +145,7 @@ def call_gemma(
     raise GemmaError(
         f"Could not get a usable response from Ollama at {OLLAMA_URL} "
         f"after {retries + 1} attempts (model: {model}).\n"
-        f"  - Is the server running?  -> `ollama serve`\n"
+        f"  - Is the server running?  -> on Windows, check the llama tray icon\n"
         f"  - Is the model pulled?    -> `ollama pull {model}`\n"
         f"  Last error: {last_err}"
     )
