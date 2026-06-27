@@ -49,7 +49,7 @@ def filter_diff(text):
     chunks = re.split(r'(?=^diff --git )', text, flags=re.MULTILINE)
     kept, skipped = [], []
     for chunk in chunks:
-        if chunk.strip() and _SKIP_FILES.match(chunk):
+        if chunk.strip() and _SKIP_FILES.match(chunk.lstrip("\n")):
             fname = chunk.splitlines()[0].replace("diff --git a/", "").split(" ")[0]
             skipped.append(fname)
         else:
@@ -165,21 +165,24 @@ def main(argv=None):
 
     if args.append:
         changelog = result["changelog"].strip()
-        if os.path.isfile(args.append):
-            with open(args.append, "r", encoding="utf-8") as f:
-                existing = f.read().rstrip()
-            lines = existing.splitlines(keepends=True)
-            if lines and lines[0].startswith("# "):
-                # Insert after heading, strip leading blank from rest to avoid double blank
-                rest = "".join(lines[1:]).lstrip("\n")
-                content = lines[0] + "\n" + changelog + "\n\n" + rest + "\n"
-            else:
-                content = changelog + "\n\n" + existing + "\n"
+        if not changelog:
+            print("[skipping --append: model produced no changelog]", file=sys.stderr)
         else:
-            content = "# Changelog\n\n" + changelog + "\n"
-        with open(args.append, "w", encoding="utf-8") as f:
-            f.write(content)
-        print(f"[changelog prepended to {args.append}]", file=sys.stderr)
+            if os.path.isfile(args.append):
+                with open(args.append, "r", encoding="utf-8") as f:
+                    existing = f.read().rstrip()
+                lines = existing.splitlines(keepends=True)
+                if lines and lines[0].startswith("# "):
+                    # Insert after heading, strip leading blank from rest to avoid double blank
+                    rest = "".join(lines[1:]).lstrip("\n")
+                    content = lines[0] + "\n" + changelog + "\n\n" + rest + "\n"
+                else:
+                    content = changelog + "\n\n" + existing + "\n"
+            else:
+                content = "# Changelog\n\n" + changelog + "\n"
+            with open(args.append, "w", encoding="utf-8") as f:
+                f.write(content)
+            print(f"[changelog prepended to {args.append}]", file=sys.stderr)
 
     return 0
 
