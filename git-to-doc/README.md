@@ -5,33 +5,51 @@ changelog snippet**, using a local Gemma model (Ollama or LM Studio).
 
 Pure CLI, no UI. Zero third-party dependencies (Python 3.8+ stdlib only).
 
+## Prerequisites
+
+- Python 3.8+
+- [Ollama](https://ollama.com/) **or** [LM Studio](https://lmstudio.ai/) running locally with a Gemma model loaded
+
 ## Quickstart
 
 ```bash
 # 0. One-time: make sure your model server is running and the model is loaded
-ollama serve                          # Ollama
+ollama serve
 ollama pull gemma3:4b                 # or gemma4:12b, gemma4:31b
 
 # Tell the tool which model you're running (gitignored, no code edits needed)
 echo "gemma3:4b" > .gemma-model
 
-# 1. Run it on the sample diff
+# 1. Run it on a diff file
 python3 main.py tests/fixtures/sample.diff
 
-# 2. Run with no model at all (uses a fake response) to test the pipeline
+# 2. Run with no model (uses a fake response) to test the pipeline offline
 python3 main.py tests/fixtures/sample.diff --mock
 
 # 3. Write the output to a file as well as printing it
 python3 main.py tests/fixtures/sample.diff --out docs.md
 
-# 4. Pipe a real diff directly from git (the strongest demo)
+# 4. Pipe a real diff directly from git
 git diff | python3 main.py -
 
-# 5. Prepend the changelog snippet to a real changelog file
+# 5. Prepend the changelog snippet to a changelog file
 python3 main.py tests/fixtures/sample.diff --append CHANGELOG.md
 ```
 
-If you see a Conventional Commit line and a changelog block printed, you're done.
+## Example output
+
+```
+## Suggested Commit Message
+
+\`\`\`
+refactor(flask): broaden CertParamType type hint
+\`\`\`
+
+## Changelog Snippet
+
+### Changed
+- Update `CertParamType` to use `t.Any` for broader compatibility in the CLI parser.
+```
 
 ## How it works
 
@@ -51,24 +69,10 @@ Lockfiles (`*.lock`, `uv.lock`, `Pipfile.lock`, `package-lock.json`, etc.) are
 automatically removed from the diff before processing. They add size without
 useful signal. Skipped files are reported to stderr.
 
-## Who owns what (5-person split)
+## Model output format
 
-Each person owns one file with a fixed interface, so you can all work in parallel
-without merge conflicts. **Agree on the interface contract below in the first 30
-minutes and then don't change it without telling the team.**
-
-| Person | File | Owns | Can start immediately because... |
-|--------|------|------|----------------------------------|
-| 1 | `gemma_client.py` | Ollama/LM Studio call, retries, timeouts, errors | it's the critical path; ship `call_gemma` first |
-| 2 | `prompts.py` | system prompt + template; killing filler | iterate in `ollama run` with no code needed |
-| 3 | `main.py` | argparse, file I/O, filtering, truncation, rendering | builds the skeleton against `--mock` |
-| 4 | `parser.py` | split output, strip fences, validate commit | works against hardcoded strings + `--mock` |
-| 5 | `tests/`, this README, repo hygiene, demo | curates real diffs, runs everything, logs failures | `--mock` makes the pipeline runnable on minute 1 |
-
-## The format contract (shared by `prompts.py` and `parser.py`)
-
-The model is asked to output exactly this, and the parser keys off the literal
-`COMMIT:` and `CHANGELOG:` markers:
+The model is asked to produce exactly this structure, and the parser keys off the
+literal `COMMIT:` and `CHANGELOG:` markers:
 
 ```
 COMMIT:
@@ -79,17 +83,12 @@ CHANGELOG:
 - Return None for empty parser input instead of raising
 ```
 
-If Person 2 renames a marker, Person 4 must update `parser.py` to match.
-
 ## Testing
 
 ```bash
 python3 tests/test_parser.py        # zero deps, prints PASS/FAIL
 python3 -m pytest tests/            # if pytest is installed
 ```
-
-Person 5: drop the 5–10 organizer-provided diffs into `tests/fixtures/` and run
-`python3 main.py tests/fixtures/<name>.diff` against each during hardening.
 
 ## Configuration
 
@@ -128,9 +127,3 @@ CLI flags: `--model`, `--temperature`, `--max-diff-chars`, `--out`, `--append`, 
   limit or trim the diff to the relevant hunk.
 - **`[skipped generated files]`** — lockfiles were filtered automatically; this
   is expected and keeps Gemma focused on real code changes.
-
-## Stretch goals (if you finish early)
-
-- Batch mode: accept a directory of diffs and write one doc per file.
-- A second validation pass that re-prompts the model when the commit is invalid,
-  instead of falling back to `salvage_commit`.
