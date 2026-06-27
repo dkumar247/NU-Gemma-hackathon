@@ -162,8 +162,6 @@ def _call_lmstudio(prompt, system, model, temperature, timeout, show_live):
         text = body["choices"][0]["message"]["content"].strip()
     except (KeyError, IndexError):
         text = ""
-    if show_live:
-        print(text, file=sys.stderr)
     return text
 
 
